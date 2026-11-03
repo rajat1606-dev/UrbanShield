@@ -1,0 +1,230 @@
+{
+  "generated_at": "2026-11-01T14:49:21+00:00",
+  "dataset": {
+    "file": "kerala_floods_imd_1901_2018.csv",
+    "source_url": "https://raw.githubusercontent.com/amandp13/Flood-Prediction-Model/master/kerala.csv",
+    "source_description": "IMD subdivisional monthly rainfall, KERALA, 1901-2018, with FLOODS yes/no labels, as published in the mirrored compilation (Kaggle 'Kerala Flood Dataset' family). Rainfall cross-checked against an independent IMD subdivisional mirror (max monthly diff < 5%).",
+    "sha256": "d95ec17fc1dd478b441892424ff50efcdc58bee234882ede77d7a6de49d42553",
+    "rows": 118,
+    "year_min": 1901,
+    "year_max": 2018,
+    "class_balance": {
+      "flood_yes": 60,
+      "flood_no": 58
+    },
+    "label_note": "Labels are exactly as published in the dataset compilation; they were neither rewritten nor augmented."
+  },
+  "features": [
+    {
+      "key": "JUN",
+      "label": "June rainfall (mm)"
+    },
+    {
+      "key": "JUL",
+      "label": "July rainfall (mm)"
+    },
+    {
+      "key": "AUG",
+      "label": "August rainfall (mm)"
+    },
+    {
+      "key": "SEP",
+      "label": "September rainfall (mm)"
+    }
+  ],
+  "split": {
+    "type": "temporal (older years train / recent years held out)",
+    "train_max_year": 2001,
+    "train_rows": 101,
+    "train_flood_years": 52,
+    "test_years": "2002-2018",
+    "test_rows": 17,
+    "test_flood_years": 8,
+    "cv": "StratifiedKFold(5, shuffle, seed=42) on the training partition only",
+    "leakage_controls": [
+      "temporal hold-out: test years never used in training or selection",
+      "cross-validation confined to the training partition",
+      "scaling fitted inside Pipelines per fold",
+      "UI class-profile statistics computed on training rows only"
+    ]
+  },
+  "comparison": [
+    {
+      "model": "Logistic Regression",
+      "cv": {
+        "accuracy": [
+          0.8414285714285714,
+          0.037904283318347415
+        ],
+        "precision": [
+          0.8772222222222222,
+          0.023333333333333314
+        ],
+        "recall": [
+          0.8090909090909092,
+          0.10507769655854465
+        ],
+        "f1": [
+          0.8372233614338878,
+          0.045836491429057144
+        ],
+        "roc_auc": [
+          0.9327474747474748,
+          0.03544446603394367
+        ]
+      },
+      "test": {
+        "accuracy": 0.9411764705882353,
+        "precision": 1.0,
+        "recall": 0.875,
+        "f1": 0.9333333333333333,
+        "roc_auc": 1.0,
+        "brier": 0.03843357304139728,
+        "confusion": {
+          "tp": 7,
+          "fp": 0,
+          "fn": 1,
+          "tn": 9
+        }
+      }
+    },
+    {
+      "model": "Decision Tree",
+      "cv": {
+        "accuracy": [
+          0.701904761904762,
+          0.10674954263418514
+        ],
+        "precision": [
+          0.7177777777777777,
+          0.08413686674507799
+        ],
+        "recall": [
+          0.6836363636363636,
+          0.25005123441949
+        ],
+        "f1": [
+          0.6767299519702266,
+          0.16692354060484133
+        ],
+        "roc_auc": [
+          0.7408282828282828,
+          0.07338026575104309
+        ]
+      },
+      "test": {
+        "accuracy": 0.8823529411764706,
+        "precision": 0.875,
+        "recall": 0.875,
+        "f1": 0.875,
+        "roc_auc": 0.8680555555555556,
+        "brier": 0.11283619889386365,
+        "confusion": {
+          "tp": 7,
+          "fp": 1,
+          "fn": 1,
+          "tn": 8
+        }
+      }
+    },
+    {
+      "model": "Random Forest",
+      "cv": {
+        "accuracy": [
+          0.8109523809523809,
+          0.09785221862248399
+        ],
+        "precision": [
+          0.8047863247863247,
+          0.07924436767288222
+        ],
+        "recall": [
+          0.8236363636363636,
+          0.1597104818618018
+        ],
+        "f1": [
+          0.8102642971064024,
+          0.11009544526593068
+        ],
+        "roc_auc": [
+          0.8739393939393938,
+          0.09264841170252691
+        ]
+      },
+      "test": {
+        "accuracy": 0.8235294117647058,
+        "precision": 0.8571428571428571,
+        "recall": 0.75,
+        "f1": 0.8,
+        "roc_auc": 0.9722222222222222,
+        "brier": 0.07228560164054719,
+        "confusion": {
+          "tp": 6,
+          "fp": 1,
+          "fn": 2,
+          "tn": 8
+        }
+      }
+    }
+  ],
+  "selected_model": "Logistic Regression",
+  "selection_rule": "highest held-out test F1 (ROC-AUC as tie-break); no test-set tuning",
+  "importance": {
+    "values": {
+      "JUN": 1.7893,
+      "JUL": 1.4785,
+      "AUG": 1.0361,
+      "SEP": 1.1468
+    },
+    "note": "standardised logistic-regression coefficients (sign = direction)"
+  },
+  "class_profile_mm": {
+    "flood": {
+      "JUN": 741.4,
+      "JUL": 798.5,
+      "AUG": 467.7,
+      "SEP": 275.8
+    },
+    "no_flood": {
+      "JUN": 577.3,
+      "JUL": 619.9,
+      "AUG": 376.8,
+      "SEP": 196.1
+    }
+  },
+  "examples": [
+    {
+      "year": 1998,
+      "label": "FLOOD",
+      "values": {
+        "JUN": 732.5,
+        "JUL": 641.4,
+        "AUG": 371.8,
+        "SEP": 517.6
+      }
+    },
+    {
+      "year": 2001,
+      "label": "NO FLOOD",
+      "values": {
+        "JUN": 715.3,
+        "JUL": 598.5,
+        "AUG": 361.3,
+        "SEP": 216.8
+      }
+    }
+  ],
+  "limitations": [
+    "Trained on the KERALA meteorological subdivision only \u2014 applying the model to Pune, Mumbai or Delhi is an unvalidated extrapolation and is labelled EXPERIMENTAL.",
+    "118 annual observations: metrics carry wide uncertainty bands.",
+    "SW-monsoon (Jun-Sep) features only; NE-monsoon-driven flood years may be missed.",
+    "Label column used exactly as published; it marks years with reported floods and is frequent (60/118) by that definition.",
+    "Probabilities are model outputs, not calibrated meteorological forecasts (Brier score reported for transparency)."
+  ],
+  "versions": {
+    "python": "3.13.15",
+    "scikit-learn": "1.9.1",
+    "pandas": "3.1.0",
+    "numpy": "2.5.4"
+  }
+}

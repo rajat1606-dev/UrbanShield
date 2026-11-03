@@ -1,0 +1,6 @@
+# UrbanShield AI — ML backend dependencies (Python 3.10+)
+flask>=3.0
+pandas>=2.0
+numpy>=1.26
+scikit-learn>=1.4
+joblib>=1.3

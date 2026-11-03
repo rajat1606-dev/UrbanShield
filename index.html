@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#070b14">
+  <title>UrbanShield AI — City Disaster Vulnerability &amp; Simulation</title>
+  <meta name="description" content="Open-data flood vulnerability dashboard for Pune, Mumbai and Delhi. Educational demonstration — not an official disaster-warning system.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%2322d3ee' d='M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5z'/%3E%3C/svg%3E">
+
+  <!-- Fonts + libraries (CDN, no keys, no build step) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+
+  <!-- Critical inline fallback: keeps the page readable & icons small even if
+       the main stylesheet ever fails to load (values mirror style.css). -->
+  <style>
+    body{ margin:0; font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+          background:#070b14; color:#e6eefc; font-size:15px; line-height:1.5; }
+    button,input,select{ font-family:inherit; }
+    svg{ max-width:100%; }
+  </style>
+
+  <!-- Main stylesheet — “?v=2.1” busts any stale cached copy that caused the
+       unstyled look. Keep file paths relative (works from Live Server & file://). -->
+  <link rel="stylesheet" href="style.css?v=2.1">
+  <script defer src="script.js?v=2.1"></script>
+</head>
+<body>
+<div class="app">
+  <div class="scrim" id="scrim" hidden></div>
+
+  <!-- ============================ SIDEBAR ============================ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-logo" aria-hidden="true">
+        <i data-lucide="shield-check"></i>
+      </div>
+      <div class="brand-text">
+        <h1>UrbanShield <span>AI</span></h1>
+        <p>Disaster Vulnerability &amp; Simulation</p>
+      </div>
+    </div>
+
+    <nav class="nav" aria-label="Main navigation">
+      <button class="nav-btn active" data-view="dashboard">
+        <i data-lucide="layout-dashboard"></i>
+        <span>Dashboard</span>
+      </button>
+      <button class="nav-btn" data-view="map">
+        <i data-lucide="map-pin"></i>
+        <span>City Risk Map</span>
+      </button>
+      <button class="nav-btn" data-view="engine">
+        <i data-lucide="layers"></i>
+        <span>Vulnerability Engine</span>
+      </button>
+      <button class="nav-btn" data-view="simulator">
+        <i data-lucide="sliders-horizontal"></i>
+        <span>What-If Simulator</span>
+      </button>
+      <button class="nav-btn" data-view="ml">
+        <i data-lucide="brain-circuit"></i>
+        <span>ML Flood Prediction</span>
+      </button>
+      <button class="nav-btn" data-view="sources">
+        <i data-lucide="database"></i>
+        <span>Data Sources</span>
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="mini-legend">
+        <span><i style="background:var(--red)"></i>High 61–100</span>
+        <span><i style="background:var(--yellow)"></i>Medium 31–60</span>
+        <span><i style="background:var(--green)"></i>Low 0–30</span>
+      </div>
+      <p>Educational demo built on open data by Rajat as College Mini Project under the guidance of Ms Tahreem Shaikh.<br><b>Not an official disaster-warning system.</b></p>
+    </div>
+  </aside>
+
+  <!-- ============================== MAIN ============================== -->
+  <div class="main">
+    <header class="topbar">
+      <button class="icon-btn" id="btnMenu" aria-label="Toggle menu">
+        <i data-lucide="menu"></i>
+      </button>
+      <div class="tb-title">
+        <h2 id="viewTitle">Dashboard</h2>
+        <span id="citySub">Pune · Maharashtra</span>
+      </div>
+      <div class="tb-actions">
+        <label class="select-wrap" aria-label="Select city">
+          <select id="citySelect">
+            <option value="pune">Pune</option>
+            <option value="mumbai">Mumbai</option>
+            <option value="delhi">Delhi</option>
+          </select>
+        </label>
+        <span class="tb-updated" title="Time of the last successful weather fetch">
+          <i class="dot" id="statusDot"></i><span id="lastUpdated">—</span>
+        </span>
+        <button class="btn btn-primary" id="btnRefresh">
+          <i data-lucide="refresh-cw"></i>
+          <span>Refresh Data</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="views">
+
+      <!-- ========================= DASHBOARD ========================= -->
+      <section class="view active" id="view-dashboard">
+        <div class="banner banner-info">
+          <b>Live open data.</b> Weather from Open-Meteo, elevation from a public DEM API, map imagery from OpenStreetMap.
+          Vulnerability scores are heuristic indicators — see <b>Vulnerability Engine</b> for the transparent formula.
+        </div>
+
+        <div class="kpi-grid" id="kpiGrid">
+          <div class="kpi"><div class="kpi-head"><span>Locations analysed</span></div><div class="kpi-value" id="kpiLocs">—</div><div class="kpi-sub" id="kpiLocsSub">—</div></div>
+          <div class="kpi"><div class="kpi-head"><span>High risk (61–100)</span><i class="dot" style="background:var(--red)"></i></div><div class="kpi-value c-high" id="kpiHigh">—</div><div class="kpi-sub">requires priority attention</div></div>
+          <div class="kpi"><div class="kpi-head"><span>Medium risk (31–60)</span><i class="dot" style="background:var(--yellow)"></i></div><div class="kpi-value c-med" id="kpiMed">—</div><div class="kpi-sub">monitor through monsoon</div></div>
+          <div class="kpi"><div class="kpi-head"><span>Low risk (0–30)</span><i class="dot" style="background:var(--green)"></i></div><div class="kpi-value c-low" id="kpiLow">—</div><div class="kpi-sub">relative to this model</div></div>
+          <div class="kpi"><div class="kpi-head"><span>Current rainfall</span><span class="badge b-obs">OBSERVED</span></div><div class="kpi-value" id="kpiRain">—</div><div class="kpi-sub">last hour · city centre</div></div>
+          <div class="kpi"><div class="kpi-head"><span>Temperature</span><span class="badge b-obs">OBSERVED</span></div><div class="kpi-value" id="kpiTemp">—</div><div class="kpi-sub" id="kpiTempSub">—</div></div>
+          <div class="kpi"><div class="kpi-head"><span>Humidity</span><span class="badge b-obs">OBSERVED</span></div><div class="kpi-value" id="kpiHum">—</div><div class="kpi-sub">relative humidity</div></div>
+          <div class="kpi"><div class="kpi-head"><span>Last data update</span></div><div class="kpi-value sm" id="kpiUpdated">—</div><div class="kpi-sub">auto-refresh every 15 min</div></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head"><h3>Risk distribution</h3><span class="chip" id="riskCityChip">—</span></div>
+            <div class="chart-box"><canvas id="riskDoughnut"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Hourly rainfall — 24 h observed + 24 h forecast</h3><span class="badge b-model">MODEL</span></div>
+            <div class="chart-box"><canvas id="rainLine"></canvas></div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head"><h3>Highest-risk locations</h3><span class="foot-note-inline">weighted vulnerability score</span></div>
+            <div class="chart-box"><canvas id="topBar"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>3-day forecast</h3><span class="badge b-model">MODEL</span></div>
+            <div class="forecast" id="forecastCards"></div>
+            <div class="city-profile" id="cityProfile"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =========================== MAP ============================ -->
+      <section class="view" id="view-map">
+        <div class="map-controls">
+          <div class="chip-row" id="riskFilters" role="group" aria-label="Filter by risk category">
+            <button class="chip active" data-filter="all">All <b id="cntAll">0</b></button>
+            <button class="chip" data-filter="high"><i class="dot" style="background:var(--red)"></i>High <b id="cntHigh">0</b></button>
+            <button class="chip" data-filter="medium"><i class="dot" style="background:var(--yellow)"></i>Medium <b id="cntMed">0</b></button>
+            <button class="chip" data-filter="low"><i class="dot" style="background:var(--green)"></i>Low <b id="cntLow">0</b></button>
+          </div>
+          <div class="map-status" id="mapStatus">—</div>
+        </div>
+        <div class="map-wrap"><div id="map" aria-label="City risk map"></div></div>
+        <p class="foot-note">
+          Ward-boundary polygons are not exposed by any free public API, so each locality is shown as a point marker at its
+          real (approximate) coordinates. Marker colour = modelled risk class. Click a marker for the full data breakdown.
+        </p>
+      </section>
+
+      <!-- ====================== ENGINE ======================= -->
+      <section class="view" id="view-engine">
+        <div class="banner banner-warn">
+          <b>Transparency first.</b> The formula below is a documented heuristic for exploration and teaching.
+          It is <b>not scientifically validated</b> and must never replace official advisories from IMD, NDMA or CWC.
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head"><h3>Weighted scoring formula</h3></div>
+            <p class="card-note">Score = Σ (normalised factor × weight) ÷ Σ (weights of <i>available</i> factors).
+              If a factor is unavailable its weight is redistributed across the rest — nothing is invented.</p>
+            <div class="table-wrap">
+              <table class="data-table" id="weightsTable">
+                <thead><tr><th>Factor</th><th>Weight</th><th>Class</th><th>Source &amp; normalisation</th></tr></thead>
+                <tbody id="weightsBody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Average factor contribution</h3><span class="chip" id="factorCityChip">—</span></div>
+            <div class="chart-box"><canvas id="factorChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3>Locations &amp; scores</h3>
+            <div class="scale-legend"><span>0–30 Low</span><span>31–60 Medium</span><span>61–100 High</span></div>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table" id="locTable">
+              <thead><tr><th>Location</th><th>Elevation</th><th>Density tier</th><th>Drainage tier</th><th>Flood est.</th><th>Score</th><th>Class</th><th></th></tr></thead>
+              <tbody id="locTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>Data transparency</h3></div>
+          <div class="badge-legend">
+            <span><i class="badge b-obs">OBSERVED</i> live sensor / station reading (Open-Meteo current conditions)</span>
+            <span><i class="badge b-model">MODEL</i> weather-model output mixing observed + forecast hours</span>
+            <span><i class="badge b-measured">MEASURED</i> terrain elevation from a public DEM (ASTER 30 m / Copernicus 90 m)</span>
+            <span><i class="badge b-official">OFFICIAL</i> published statistics (Census of India 2011, city level)</span>
+            <span><i class="badge b-estimate">ESTIMATE</i> analyst tier informed by public records — not a measurement</span>
+            <span><i class="badge b-na">UNAVAILABLE</i> API/dataset unreachable — weight redistributed, nothing fabricated</span>
+          </div>
+          <p class="card-note">
+            Drainage-network data and ward-level population are <b>not available through any free API</b>; both use clearly-marked
+            qualitative tiers. Flood history is compiled from public records listed on the <b>Data Sources</b> page. Land-use classes are
+            cross-checked against live OpenStreetMap land-use tags wherever the Overpass service responds.
+          </p>
+        </div>
+      </section>
+
+      <!-- ======================= SIMULATOR ======================= -->
+      <section class="view" id="view-simulator">
+        <div class="banner banner-info">
+          <b>Hypothetical scenarios.</b> Sliders only adjust model factors inside this page.
+          Simulated values are kept strictly separate from real-world observations and are never presented as forecasts.
+        </div>
+
+        <div class="sim-grid">
+          <div class="card sim-panel">
+            <div class="card-head"><h3>Scenario sliders</h3><span class="badge b-estimate">SIMULATED</span></div>
+
+            <div class="slider-row">
+              <div class="slider-label"><span>Rainfall increase</span><output id="simRainOut">+0%</output></div>
+              <input type="range" id="simRain" min="0" max="100" step="5" value="0">
+              <p>Multiplies the rainfall factor score (0–100) by up to 2× — models cloudburst / monsoon-spike stress.</p>
+            </div>
+            <div class="slider-row">
+              <div class="slider-label"><span>Drainage improvement</span><output id="simDrainOut">+0%</output></div>
+              <input type="range" id="simDrain" min="0" max="100" step="5" value="0">
+              <p>Reduces the drainage-vulnerability factor score — models upgrades to storm-water capacity.</p>
+            </div>
+            <div class="slider-row">
+              <div class="slider-label"><span>Green cover increase</span><output id="simGreenOut">+0%</output></div>
+              <input type="range" id="simGreen" min="0" max="100" step="5" value="0">
+              <p>Reduces the land-use factor score — models permeable surfaces, parks and retention.</p>
+            </div>
+
+            <button class="btn btn-ghost" id="btnSimReset">Reset sliders</button>
+            <p class="foot-note">Recalculation is instant: every location's weighted score is recomputed with the adjusted factors and re-classified (0–30 Low · 31–60 Medium · 61–100 High).</p>
+          </div>
+
+          <div class="sim-results">
+            <div class="kpi-grid kpi-4">
+              <div class="kpi"><div class="kpi-head"><span>Original avg score</span></div><div class="kpi-value" id="simOrig">—</div><div class="kpi-sub">current live conditions</div></div>
+              <div class="kpi"><div class="kpi-head"><span>Simulated avg score</span></div><div class="kpi-value" id="simNew">—</div><div class="kpi-sub">with scenario applied</div></div>
+              <div class="kpi"><div class="kpi-head"><span>Risk change</span></div><div class="kpi-value" id="simDelta">—</div><div class="kpi-sub" id="simDeltaSub">—</div></div>
+              <div class="kpi"><div class="kpi-head"><span>High-risk locations</span></div><div class="kpi-value" id="simHigh">—</div><div class="kpi-sub">before → after</div></div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h3>Before / after — score per location</h3><span class="chip" id="simClassChip">—</span></div>
+              <div class="chart-box tall"><canvas id="simChart"></canvas></div>
+            </div>
+
+            <div class="card">
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead><tr><th>Location</th><th>Original</th><th>Simulated</th><th>Δ</th><th>Classification</th></tr></thead>
+                  <tbody id="simTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== ML FLOOD PREDICTION ==================== -->
+      <section class="view" id="view-ml">
+        <div class="banner banner-warn">
+          <b>Genuine machine learning — honestly labelled.</b> Scikit-learn models (Random Forest, Decision Tree,
+          Logistic Regression) trained on a <b>real IMD dataset</b>: Kerala subdivision monthly rainfall 1901–2018
+          with published flood labels, evaluated with a temporal hold-out + cross-validation and explicit leakage
+          controls. <b>Not validated for Pune, Mumbai or Delhi</b> — predictions there are experimental
+          extrapolations. This is never an official flood warning.
+        </div>
+
+        <div class="card ml-offline-card" id="mlOffline" hidden>
+          <div class="card-head"><h3>ML backend offline</h3><span class="badge b-na">UNAVAILABLE</span></div>
+          <p class="card-note" id="mlOfflineMsg">The ML API is unreachable, so no prediction or metric is shown —
+            nothing is hardcoded or faked on this page.</p>
+          <p class="card-note">Start the backend in a terminal, then reload this page:</p>
+          <pre class="code-block">cd UrbanShield-AI/backend
+pip install -r requirements.txt
+python train_ml.py   # trains + evaluates the 3 models (downloads the dataset on first run)
+python app.py        # serves the site + ML API on http://127.0.0.1:5000</pre>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head"><h3>Model card</h3><span class="badge b-model" id="mlAlgoBadge">—</span></div>
+            <div class="ml-model-info" id="mlModelInfo">
+              <p class="card-note">Loading the training report from the ML backend…</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>Held-out test performance</h3><span class="badge b-measured">REAL METRICS</span></div>
+            <div class="metric-grid" id="mlMetrics"></div>
+            <div class="cm-block" id="mlConfusion"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>Model comparison — same split, same folds</h3><span class="chip" id="mlSelChip">—</span></div>
+          <div class="table-wrap">
+            <table class="data-table" id="mlCompareTable">
+              <thead><tr><th>Model</th><th>CV F1 (train era)</th><th>CV ROC-AUC</th><th>Test F1</th><th>Test Acc</th><th>Test Precision</th><th>Test Recall</th><th>Test ROC-AUC</th><th>Selected</th></tr></thead>
+              <tbody id="mlCompareBody"></tbody>
+            </table>
+          </div>
+          <p class="card-note">CV = 5-fold stratified cross-validation inside the training era only. Test = recent years the models never saw during training or selection.</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head"><h3>Feature influence — selected model</h3></div>
+            <div class="chart-box"><canvas id="mlImportance"></canvas></div>
+            <p class="card-note" id="mlImpNote">—</p>
+          </div>
+          <div class="card">
+            <div class="card-head"><h3>What the model learned</h3><span class="foot-note-inline">training-partition means</span></div>
+            <div id="mlProfile"></div>
+            <p class="card-note">Average SW-monsoon rainfall of flood vs non-flood years in the training data — the pattern the classifier separates.</p>
+          </div>
+        </div>
+
+        <div class="ml-grid">
+          <div class="card sim-panel ml-panel">
+            <div class="card-head"><h3>Run a prediction</h3><span class="badge b-estimate">EXPERIMENTAL</span></div>
+            <div class="ml-selects">
+              <label class="ml-field"><span>City</span><select id="mlCity"></select></label>
+              <label class="ml-field"><span>Locality</span><select id="mlLoc"></select></label>
+              <label class="ml-field"><span>Year (for ERA5 fetch)</span><select id="mlYear"></select></label>
+            </div>
+            <button class="btn btn-ghost" id="btnMlFetch">
+              <i data-lucide="cloud-download"></i>
+              <span>Fetch real rainfall for this year (ERA5)</span>
+            </button>
+            <div class="month-grid">
+              <label class="ml-field"><span>June mm</span><input type="number" id="mlJun" min="0" max="5000" step="1" placeholder="—"></label>
+              <label class="ml-field"><span>July mm</span><input type="number" id="mlJul" min="0" max="5000" step="1" placeholder="—"></label>
+              <label class="ml-field"><span>August mm</span><input type="number" id="mlAug" min="0" max="5000" step="1" placeholder="—"></label>
+              <label class="ml-field"><span>September mm</span><input type="number" id="mlSep" min="0" max="5000" step="1" placeholder="—"></label>
+            </div>
+            <p><span class="badge b-model" id="mlFetchBadge" hidden>FILLED FROM ERA5 REANALYSIS — MODEL DATA, NOT GAUGES</span></p>
+            <div class="ml-actions">
+              <button class="btn btn-primary" id="btnMlPredict">Predict flood risk</button>
+              <button class="btn btn-ghost" id="btnMlExample"><i data-lucide="history"></i><span>Real example year</span></button>
+            </div>
+            <p class="foot-note">Inputs are the same four SW-monsoon features the model was trained on (Jun–Sep monthly totals, mm). You can type values or fetch real ERA5 reanalysis data for any locality and year.</p>
+          </div>
+
+          <div class="ml-results">
+            <div class="card">
+              <div class="card-head"><h3>ML prediction</h3><span class="badge b-model" id="mlPredAlgo">—</span></div>
+              <div class="ml-pred-context" id="mlPredMeta">Enter (or fetch) rainfall, then press <b>Predict flood risk</b>.</div>
+              <div class="ml-verdict" id="mlVerdict">—</div>
+              <div class="prob-wrap" id="mlProbWrap" hidden>
+                <div class="prob-head"><span>P(flood)</span><b id="mlProbLabel">—</b></div>
+                <div class="prob-bar"><i id="mlProbFill"></i><i class="prob-th"></i></div>
+                <p class="foot-note" id="mlProbNote"></p>
+              </div>
+              <div class="ml-factors" id="mlFactors"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h3>Rule-based engine — same locality</h3><span class="badge b-estimate">HEURISTIC · NOT ML</span></div>
+              <div id="mlRuleCompare"></div>
+              <p class="card-note">The six-factor weighted score is a transparent heuristic (rainfall exposure, elevation, density, land use, drainage, flood history). The ML model instead learns from labelled flood history. Related questions, different methods — <b>compare them, don't merge them</b>.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>Known limitations</h3><span class="badge b-na">READ BEFORE TRUSTING A NUMBER</span></div>
+          <ul class="disc-list" id="mlLimits">
+            <li>Loaded from the ML backend at runtime — start the backend to see the training-time limitation list.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ======================== SOURCES ======================== -->
+      <section class="view" id="view-sources">
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head"><h3>Live API status (this session)</h3></div>
+            <div class="src-list" id="srcList"></div>
+            <button class="btn btn-ghost" id="btnClearCache">Clear cached datasets &amp; reload</button>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h3>Population — Census of India 2011</h3><span class="badge b-official">OFFICIAL</span></div>
+            <p class="card-note">Ward-level population is not published through a machine-readable API, so scoring uses the official
+              city-level density plus a clearly-marked relative density tier per locality (1 = sparse … 5 = extremely dense).</p>
+            <div class="table-wrap">
+              <table class="data-table" id="censusTable">
+                <thead><tr><th>City</th><th>Population</th><th>Area</th><th>Density (computed)</th></tr></thead>
+                <tbody id="censusBody"></tbody>
+              </table>
+            </div>
+            <p class="card-note">Source: <a href="https://censusindia.gov.in/" target="_blank" rel="noopener">censusindia.gov.in</a> — Primary Census Abstract, 2011 (latest released at this granularity). Densities are computed in-app from the published population ÷ area.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>Documented historical flood events</h3><span class="badge b-estimate">PUBLIC RECORDS</span></div>
+          <div class="flood-grid" id="floodLists"></div>
+          <p class="card-note">
+            Historical hazard portals — <a href="https://bhuvan.nrsc.gov.in/" target="_blank" rel="noopener">Bhuvan (NRSC)</a> and
+            <a href="https://ndem.nrsc.gov.in/" target="_blank" rel="noopener">NDEM (NRSC)</a> — publish flood hazard layers as
+            manual portal downloads (WMS/shapefile), <b>not</b> as a key-less JSON API, so they cannot be fetched live from a browser.
+            The per-locality flood-history factor is therefore a documented analyst estimate informed by the events above.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>Disclaimers</h3></div>
+          <ul class="disc-list">
+            <li>UrbanShield AI is an <b>educational demonstration</b> of open-data integration and transparent multi-factor scoring.</li>
+            <li>The weighted formula is <b>not scientifically validated</b>. Scores are relative indicators, not probabilities of flooding.</li>
+            <li>This tool does <b>not</b> provide official disaster warnings. Follow IMD, NDMA, SDMA and city municipal corporations for advisories.</li>
+            <li>Simulated ("what-if") values are hypothetical and kept separate from all live observations.</li>
+            <li>Locality coordinates are real neighbourhoods shown at approximate points; ward boundaries are not publicly available via API.</li>
+            <li>The ML Flood Prediction section trains real scikit-learn models (Random Forest, Decision Tree, Logistic Regression) on the IMD Kerala rainfall dataset with published flood labels (1901–2018); predictions outside Kerala are <b>experimental extrapolations</b>, and the six-factor scoring engine remains a separate non-ML heuristic.</li>
+          </ul>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="app-foot">
+      UrbanShield AI · open-data educational demo · Rajat Rakesh · PRN - 20240802728
+    </footer>
+  </div>
+</div>
+
+<!-- ============================ LOCATION MODAL ============================ -->
+<div class="modal" id="modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-head">
+      <div>
+        <h3 id="modalTitle">—</h3>
+        <span id="modalSub">—</span>
+      </div>
+      <button class="icon-btn" id="modalClose" aria-label="Close">
+        <i data-lucide="x"></i>
+      </button>
+    </div>
+    <div id="modalBody"></div>
+    <div class="chart-box sm"><canvas id="modalChart"></canvas></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
